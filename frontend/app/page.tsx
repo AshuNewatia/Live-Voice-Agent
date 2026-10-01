@@ -1,159 +1,394 @@
 "use client";
 
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
-  VoiceAssistantControlBar,
   useVoiceAssistant,
   useLocalParticipant,
   useTrackTranscription,
+  useConnectionState,
 } from "@livekit/components-react";
-import "@livekit/components-styles";
-import { useEffect, useRef, useState } from "react";
-import { Track } from "livekit-client";
+import { ConnectionState, Track } from "livekit-client";
 
-export default function Home() {
+export default function IMFCommandConsole() {
   const [token, setToken] = useState<string>("");
-  const [roomName, setRoomName] = useState<string>("");
-  const [error, setError] = useState<string>("");
-  const [secTimer, setSecTimer] = useState<string>("00:00:00");
+  const [url, setUrl] = useState<string>("");
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [missionTime, setMissionTime] = useState<number>(0);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
 
+  // Mission stopwatch
   useEffect(() => {
-    const start = Date.now();
-    const interval = setInterval(() => {
-      const diff = Math.floor((Date.now() - start) / 1000);
-      const hrs = String(Math.floor(diff / 3600)).padStart(2, "0");
-      const mins = String(Math.floor((diff % 3600) / 60)).padStart(2, "0");
-      const secs = String(diff % 60).padStart(2, "0");
-      setSecTimer(`${hrs}:${mins}:${secs}`);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+    let timer: NodeJS.Timeout;
+    if (token) {
+      timer = setInterval(() => setMissionTime((t) => t + 1), 1000);
+    } else {
+      setMissionTime(0);
+    }
+    return () => clearInterval(timer);
+  }, [token]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const resp = await fetch("/api/token");
-        const data = await resp.json();
-        if (data.token && data.roomName) {
-          setToken(data.token);
-          setRoomName(data.roomName);
-        } else {
-          setError("SECURITY CIPHER MISMATCH: ACCESS REJECTED");
-        }
-      } catch (e) {
-        console.error("Failed to fetch token:", e);
-        setError("SATELLITE DOWNLINK INTERRUPTED");
-      }
-    })();
-  }, []);
+  const formatMissionTime = (sec: number) => {
+    const hrs = Math.floor(sec / 3600);
+    const mins = Math.floor((sec % 3600) / 60);
+    const secs = sec % 60;
+    return `${hrs.toString().padStart(2, "0")}:${mins
+      .toString()
+      .padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
 
-  if (error) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#020617] text-cyan-400 font-mono tracking-widest uppercase">
-        <div className="border border-cyan-500/40 bg-cyan-950/20 p-8 shadow-[0_0_50px_rgba(6,182,212,0.3)]">
-          <p className="animate-pulse">⚠ [IMF PROTOCOL BREACH]: {error}</p>
-        </div>
-      </div>
-    );
-  }
+  const initMission = async () => {
+    try {
+      setIsConnecting(true);
+      const res = await fetch("/api/token");
+      const data = await res.json();
+      if (!data.token) throw new Error("Token acquisition failed");
+      setToken(data.token);
+      setUrl(data.url || process.env.NEXT_PUBLIC_LIVEKIT_URL || "");
+    } catch (err) {
+      console.error("[UPLINK FAILURE]:", err);
+      alert(
+        "IMF Downlink Failure: Could not establish encrypted token connection.",
+      );
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
-  if (!token || !roomName) {
-    return (
-      <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#020617] text-cyan-400 font-mono gap-4 select-none">
-        <div className="relative w-20 h-20 border-2 border-dashed border-cyan-500/40 rounded-full animate-spin flex items-center justify-center">
-          <div className="w-12 h-12 border-2 border-blue-500 rounded-full animate-ping"></div>
-        </div>
-        <p className="text-xs uppercase tracking-[0.4em] animate-pulse">
-          ESTABLISHING QUANTUM DOWNLINK...
-        </p>
-      </div>
-    );
-  }
+  const abortMission = () => {
+    setToken("");
+    setUrl("");
+    setIsMuted(false);
+  };
 
   return (
-    <main className="relative flex h-screen w-screen flex-col justify-between bg-[#01040f] text-cyan-100 font-mono overflow-hidden select-none">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(1,4,15,0.95)_100%)] z-20"></div>
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(14,165,233,0)_50%,rgba(2,6,23,0.35)_50%)] bg-[length:100%_4px] z-20 opacity-70"></div>
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#0284c715_1px,transparent_1px),linear-gradient(to_bottom,#0284c715_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+    <main className="relative w-full h-[100dvh] bg-[#020611] text-cyan-400 font-mono flex flex-col overflow-hidden select-none">
+      {/* Scanline CRT FX */}
+      <div className="pointer-events-none absolute inset-0 z-50 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.65)_100%)] opacity-80" />
+      <div className="pointer-events-none absolute inset-0 z-50 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px]" />
 
-      <header className="relative w-full flex items-center justify-between py-3 px-8 bg-slate-950/80 border-b border-cyan-900/60 backdrop-blur-md z-30">
-        <div className="flex items-center gap-4">
-          <div className="px-2.5 py-0.5 bg-cyan-500/10 border border-cyan-400 text-cyan-300 text-[11px] font-bold tracking-widest uppercase shadow-[0_0_12px_rgba(6,182,212,0.3)]">
-            IMF // BLACK-OPS
+      {/* Tactical HUD Header */}
+      <header className="relative z-20 flex flex-wrap items-center justify-between border-b border-cyan-900/60 bg-[#030a1c]/90 px-3 py-2 sm:px-6 sm:py-3 shrink-0 backdrop-blur-md gap-2">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="relative flex h-2.5 w-2.5 items-center justify-center">
+            <span
+              className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                token ? "animate-ping bg-cyan-400" : "bg-red-500"
+              }`}
+            />
+            <span
+              className={`relative inline-flex h-2 w-2 rounded-full ${
+                token ? "bg-cyan-400" : "bg-red-500"
+              }`}
+            />
           </div>
           <div>
-            <h1 className="text-sm font-black tracking-widest text-cyan-300 uppercase flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping shadow-[0_0_8px_#22d3ee]"></span>
-              TACTICAL FIELD OPERATING LINK
+            <h1 className="text-xs sm:text-sm font-black tracking-widest uppercase text-cyan-200">
+              IMF TACTICAL SECURE DOWNLINK
             </h1>
-            <p className="text-[10px] text-cyan-600 tracking-wider">
-              CLEARANCE: LEVEL 5 (DIRECTOR EYES ONLY)
+            <p className="text-[9px] sm:text-[10px] text-cyan-600 font-semibold tracking-wider">
+              PROTOCOL: {token ? "ENCRYPTED COMMS ACTIVE" : "AWAITING DISPATCH"}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-8 text-xs">
+        {/* Telemetry metadata */}
+        <div className="flex items-center gap-3 sm:gap-6 text-[10px] sm:text-xs">
           <div className="flex flex-col items-end">
-            <span className="text-[9px] text-cyan-600 uppercase tracking-widest">
-              MISSION ELAPSED
+            <span className="text-[8px] sm:text-[9px] uppercase tracking-wider text-cyan-600">
+              MISSION TIME
             </span>
-            <span className="text-cyan-300 font-bold tracking-wider">
-              {secTimer}
+            <span className="font-bold tracking-widest text-cyan-300">
+              {formatMissionTime(missionTime)}
             </span>
           </div>
-          <div className="flex flex-col items-end">
-            <span className="text-[9px] text-cyan-600 uppercase tracking-widest">
-              DOWNLINK NODE
+          <div className="hidden sm:flex flex-col items-end">
+            <span className="text-[8px] sm:text-[9px] uppercase tracking-wider text-cyan-600">
+              SECURITY LEVEL
             </span>
-            <span className="text-blue-400 font-bold tracking-wide">
-              {roomName}
+            <span className="font-bold tracking-widest text-cyan-300">
+              IMF-TOP-SECRET
             </span>
           </div>
         </div>
       </header>
 
-      <div className="relative flex-1 w-full flex flex-col justify-between py-4 px-8 z-30 overflow-hidden">
+      {/* Main Terminal Viewport */}
+      {!token ? (
+        /* Standby / Connect Screen */
+        <div className="relative z-20 flex-1 flex flex-col items-center justify-center p-4 sm:p-6 text-center">
+          <div className="w-full max-w-md border border-cyan-900/60 bg-[#03091e]/80 p-6 sm:p-8 backdrop-blur-md relative shadow-[0_0_50px_rgba(6,182,212,0.12)]">
+            {/* HUD Corner Reticles */}
+            <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-cyan-400" />
+            <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-cyan-400" />
+            <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-cyan-400" />
+            <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-cyan-400" />
+
+            <div className="w-12 h-12 mx-auto mb-4 border border-cyan-500/40 rounded-full flex items-center justify-center text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.25)]">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-6 h-6 animate-pulse"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
+                />
+              </svg>
+            </div>
+
+            <h2 className="text-sm sm:text-base font-bold tracking-widest text-cyan-100 uppercase mb-2">
+              IMPOSSIBLE MISSION FORCE
+            </h2>
+            <p className="text-[11px] sm:text-xs text-cyan-600 mb-6 leading-relaxed">
+              Autonomous Tactical Core offline. Initialize encrypted field
+              downlink to connect with the tactical voice agent.
+            </p>
+
+            <button
+              onClick={initMission}
+              disabled={isConnecting}
+              className="w-full py-3.5 px-4 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500 text-cyan-200 text-xs sm:text-sm font-bold tracking-widest uppercase transition-all duration-200 active:scale-[0.98] shadow-[0_0_20px_rgba(6,182,212,0.3)] disabled:opacity-50"
+            >
+              {isConnecting ? "ENCRYPTING DOWNLINK..." : "INITIALIZE UPLINK"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* Active Mission HUD */
         <LiveKitRoom
-          video={false}
-          audio={true}
           token={token}
-          serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
-          data-lk-theme="default"
-          className="w-full h-full flex flex-col justify-between items-center gap-4"
+          serverUrl={url}
+          connect={true}
+          audio={true}
+          video={false}
+          onDisconnected={abortMission}
+          className="relative z-20 flex-1 flex flex-col overflow-hidden"
         >
-          <div className="w-full">
-            <IMFTacticalTimeline />
-          </div>
-
-          <div className="w-full flex-1 min-h-[160px] max-h-[220px]">
-            <TacticalTranscriptFeed />
-          </div>
-
-          <div className="px-8 py-2 bg-slate-950/90 border border-cyan-800/60 shadow-[0_0_30px_rgba(6,182,212,0.25)] rounded-md">
-            <VoiceAssistantControlBar />
-          </div>
-
           <RoomAudioRenderer />
+          <TacticalHUDCore
+            onAbort={abortMission}
+            isMuted={isMuted}
+            setIsMuted={setIsMuted}
+          />
         </LiveKitRoom>
-      </div>
-
-      <footer className="relative w-full flex items-center justify-between py-2.5 px-8 border-t border-cyan-950 bg-slate-950/80 text-[10px] text-cyan-600 z-30">
-        <div className="flex items-center gap-6">
-          <span className="text-cyan-400 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>{" "}
-            SATELLITE: LOCKED (GEO-SYNC)
-          </span>
-          <span>CIPHER: 4096-BIT QUANTUM ASYMMETRIC</span>
-        </div>
-        <div className="text-cyan-500/70 tracking-widest uppercase">
-          SECURE COMM CHANNEL // MONITORING ACTIVE
-        </div>
-      </footer>
+      )}
     </main>
   );
 }
 
+interface HUDCoreProps {
+  onAbort: () => void;
+  isMuted: boolean;
+  setIsMuted: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+function TacticalHUDCore({ onAbort, isMuted, setIsMuted }: HUDCoreProps) {
+  const connectionState = useConnectionState();
+  const { localParticipant } = useLocalParticipant();
+
+  const toggleMic = async () => {
+    if (!localParticipant) return;
+    const currentMute = localParticipant.isMicrophoneEnabled;
+    await localParticipant.setMicrophoneEnabled(!currentMute);
+    setIsMuted(currentMute);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col p-2 sm:p-4 gap-2 sm:gap-3 overflow-hidden">
+      {/* Visualizers & Feed Responsive Split: Stack on mobile, side-by-side on lg */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-3 min-h-0 overflow-hidden">
+        {/* Oscilloscope Panel (Top on mobile, Left on desktop) */}
+        <section className="lg:col-span-5 flex flex-col gap-2 sm:gap-3 min-h-[180px] sm:min-h-[220px] lg:min-h-0">
+          <div className="flex-1 relative bg-[#03091e]/80 border border-cyan-900/60 p-2 sm:p-3 flex flex-col">
+            <Reticles />
+            <span className="text-[9px] font-bold tracking-widest text-cyan-500 uppercase mb-1">
+              CHANNEL 01 // OPERATOR MIC WAVEFORM
+            </span>
+            <div className="flex-1 relative w-full h-full min-h-[70px]">
+              <TrackOscilloscope source="local" />
+            </div>
+          </div>
+
+          <div className="flex-1 relative bg-[#03091e]/80 border border-cyan-900/60 p-2 sm:p-3 flex flex-col">
+            <Reticles />
+            <span className="text-[9px] font-bold tracking-widest text-cyan-400 uppercase mb-1">
+              CHANNEL 02 // IMF AGENT SYNTH WAVEFORM
+            </span>
+            <div className="flex-1 relative w-full h-full min-h-[70px]">
+              <TrackOscilloscope source="agent" />
+            </div>
+          </div>
+        </section>
+
+        {/* Tactical Feed Panel (Bottom on mobile, Right on desktop) */}
+        <section className="lg:col-span-7 flex-1 min-h-[220px] lg:min-h-0 overflow-hidden">
+          <TacticalTranscriptFeed />
+        </section>
+      </div>
+
+      {/* Tactical Bottom Control Bar */}
+      <footer className="shrink-0 flex items-center justify-between border border-cyan-900/60 bg-[#030a1c]/90 px-3 py-2 sm:px-4 sm:py-3 gap-2">
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs">
+          <span className="text-cyan-600 hidden sm:inline">STATUS:</span>
+          <span
+            className={`font-bold tracking-wider ${
+              connectionState === ConnectionState.Connected
+                ? "text-cyan-300"
+                : "text-amber-400 animate-pulse"
+            }`}
+          >
+            {connectionState.toUpperCase()}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Mute Button */}
+          <button
+            onClick={toggleMic}
+            className={`px-3 py-2 text-[10px] sm:text-xs font-bold tracking-wider uppercase border transition-all ${
+              isMuted
+                ? "bg-amber-950/80 border-amber-500 text-amber-300"
+                : "bg-cyan-950/60 border-cyan-600 text-cyan-300 hover:bg-cyan-900/60"
+            }`}
+          >
+            {isMuted ? "UNMUTE MIC" : "MUTE MIC"}
+          </button>
+
+          {/* Abort Mission Button */}
+          <button
+            onClick={onAbort}
+            className="px-3 py-2 bg-red-950/60 hover:bg-red-900/80 border border-red-500/80 text-red-300 text-[10px] sm:text-xs font-bold tracking-wider uppercase transition-all shadow-[0_0_10px_rgba(239,68,68,0.2)]"
+          >
+            TERMINATE DOWNLINK
+          </button>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+/* Responsive Real-Time Canvas Oscilloscope */
+function TrackOscilloscope({ source }: { source: "local" | "agent" }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const { audioTrack: agentAudioTrack } = useVoiceAssistant();
+  const { localParticipant } = useLocalParticipant();
+
+  const micPub = Array.from(localParticipant.trackPublications.values()).find(
+    (p) => p.source === Track.Source.Microphone && p.track,
+  );
+
+  const activeTrack =
+    source === "agent"
+      ? agentAudioTrack?.publication?.track?.mediaStreamTrack
+      : micPub?.track?.mediaStreamTrack;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Responsive Canvas Resize Observer
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          canvas.width = Math.floor(width * window.devicePixelRatio);
+          canvas.height = Math.floor(height * window.devicePixelRatio);
+        }
+      }
+    });
+
+    if (canvas.parentElement) {
+      resizeObserver.observe(canvas.parentElement);
+    }
+
+    if (!activeTrack) {
+      // Idle Flatline
+      let animId: number;
+      const drawIdle = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle =
+          source === "local" ? "rgba(56,189,248,0.2)" : "rgba(6,182,212,0.2)";
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height / 2);
+        ctx.lineTo(canvas.width, canvas.height / 2);
+        ctx.stroke();
+        animId = requestAnimationFrame(drawIdle);
+      };
+      drawIdle();
+      return () => {
+        cancelAnimationFrame(animId);
+        resizeObserver.disconnect();
+      };
+    }
+
+    // AudioContext Setup
+    const audioCtx = new (
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext
+    )();
+    const mediaStream = new MediaStream([activeTrack]);
+    const audioSource = audioCtx.createMediaStreamSource(mediaStream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    audioSource.connect(analyser);
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    let animId: number;
+
+    const render = () => {
+      analyser.getByteTimeDomainData(dataArray);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.lineWidth = source === "agent" ? 2 : 1.5;
+      ctx.strokeStyle = source === "local" ? "#38bdf8" : "#22d3ee";
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = source === "local" ? "#0284c7" : "#06b6d4";
+
+      ctx.beginPath();
+      const sliceWidth = canvas.width / bufferLength;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * canvas.height) / 2;
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+        x += sliceWidth;
+      }
+
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+      animId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animId);
+      audioCtx.close().catch(() => {});
+      resizeObserver.disconnect();
+    };
+  }, [activeTrack, source]);
+
+  return <canvas ref={canvasRef} className="w-full h-full block" />;
+}
+
+/* Real-Time Transcript Feed with Dynamic Mobile Height */
 function TacticalTranscriptFeed() {
   const { audioTrack: aiAudioTrack } = useVoiceAssistant();
   const { localParticipant } = useLocalParticipant();
@@ -175,7 +410,6 @@ function TacticalTranscriptFeed() {
   ).segments;
   const userSegments = useTrackTranscription(localTrackRef).segments;
 
-  // Explicitly tag speaker role at the segment level
   const taggedAgentSegments = (agentSegments || []).map((seg) => ({
     ...seg,
     speakerRole: "agent" as const,
@@ -199,42 +433,40 @@ function TacticalTranscriptFeed() {
   }, [allSegments]);
 
   return (
-    <div className="w-full h-full bg-[#030816]/90 border border-cyan-900/60 flex flex-col p-4 relative shadow-[0_0_40px_rgba(2,132,199,0.1)]">
-      <div className="absolute top-0 left-0 w-2.5 h-2.5 border-t border-l border-cyan-400"></div>
-      <div className="absolute top-0 right-0 w-2.5 h-2.5 border-t border-r border-cyan-400"></div>
-      <div className="absolute bottom-0 left-0 w-2.5 h-2.5 border-b border-l border-cyan-400"></div>
-      <div className="absolute bottom-0 right-0 w-2.5 h-2.5 border-b border-r border-cyan-400"></div>
+    <div className="w-full h-full bg-[#030816]/90 border border-cyan-900/60 flex flex-col p-3 sm:p-4 relative shadow-[0_0_40px_rgba(2,132,199,0.1)] overflow-hidden">
+      <Reticles />
 
-      <div className="flex items-center justify-between border-b border-cyan-900/50 pb-2 mb-2">
+      {/* Subheader */}
+      <div className="flex items-center justify-between border-b border-cyan-900/50 pb-2 mb-2 shrink-0">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-          <span className="text-[10px] font-bold tracking-widest text-cyan-400 uppercase">
-            LIVE TACTICAL DECRYPTION // COMMS FEED
+          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+          <span className="text-[9px] sm:text-[10px] font-bold tracking-widest text-cyan-400 uppercase">
+            TACTICAL DECRYPTION // COMMS FEED
           </span>
         </div>
-        <span className="text-[9px] text-cyan-600 font-mono tracking-wider">
-          STT: STREAMING
+        <span className="text-[8px] sm:text-[9px] text-cyan-600 font-mono tracking-wider">
+          LIVE STT
         </span>
       </div>
 
+      {/* Auto-scrolling Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-cyan-900 scrollbar-track-transparent"
+        className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-cyan-900 scrollbar-track-transparent"
       >
         {allSegments && allSegments.length > 0 ? (
           allSegments.map((seg, idx) => {
             const isOperator = seg.speakerRole === "operator";
-
             return (
               <div
                 key={seg.id || `${seg.speakerRole}-${idx}`}
-                className="flex items-start gap-3 text-xs leading-relaxed"
+                className="flex items-start gap-2 sm:gap-3 text-[11px] sm:text-xs leading-relaxed"
               >
                 <span
-                  className={`px-1.5 py-0.5 text-[9px] font-bold tracking-wider shrink-0 border ${
+                  className={`px-1.5 py-0.5 text-[8px] sm:text-[9px] font-bold tracking-wider shrink-0 border ${
                     isOperator
-                      ? "bg-sky-950/80 border-sky-400 text-sky-300 shadow-[0_0_8px_rgba(56,189,248,0.3)]"
-                      : "bg-cyan-950/80 border-cyan-500 text-cyan-300 shadow-[0_0_8px_rgba(6,182,212,0.3)]"
+                      ? "bg-sky-950/80 border-sky-400 text-sky-300"
+                      : "bg-cyan-950/80 border-cyan-500 text-cyan-300"
                   }`}
                 >
                   {isOperator ? "OPERATOR" : "IMF AI"}
@@ -250,7 +482,7 @@ function TacticalTranscriptFeed() {
             );
           })
         ) : (
-          <div className="h-full flex items-center justify-center text-cyan-700/60 text-xs tracking-widest uppercase">
+          <div className="h-full flex items-center justify-center text-cyan-700/60 text-[10px] sm:text-xs tracking-widest uppercase text-center p-4">
             [STANDBY: NO AUDIO SIGNALS DETECTED ON WIRE]
           </div>
         )}
@@ -259,217 +491,14 @@ function TacticalTranscriptFeed() {
   );
 }
 
-function IMFTacticalTimeline() {
-  const { state, audioTrack: aiAudioTrack } = useVoiceAssistant();
-  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
-
-  const micCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const aiCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const prevMicData = useRef<number[]>(new Array(160).fill(0));
-  const prevAiData = useRef<number[]>(new Array(160).fill(0));
-
-  useEffect(() => {
-    const resizeCanvas = () => {
-      if (micCanvasRef.current && aiCanvasRef.current) {
-        const width = micCanvasRef.current.parentElement?.clientWidth || 1200;
-        micCanvasRef.current.width = width;
-        micCanvasRef.current.height = 70;
-        aiCanvasRef.current.width = width;
-        aiCanvasRef.current.height = 70;
-      }
-    };
-
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-    return () => window.removeEventListener("resize", resizeCanvas);
-  }, []);
-
-  useEffect(() => {
-    const micPub = Array.from(localParticipant.trackPublications.values()).find(
-      (p) => p.source === Track.Source.Microphone && p.track,
-    );
-    const mediaStreamTrack = micPub?.track?.mediaStreamTrack;
-    if (!mediaStreamTrack || !micCanvasRef.current) return;
-
-    const AudioContextClass =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
-    const audioCtx = new AudioContextClass();
-    const stream = new MediaStream([mediaStreamTrack]);
-    const source = audioCtx.createMediaStreamSource(stream);
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 512;
-    analyser.smoothingTimeConstant = 0.8;
-    source.connect(analyser);
-
-    const canvas = micCanvasRef.current;
-    const ctx = canvas.getContext("2d");
-    let animationId: number;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    const render = () => {
-      animationId = requestAnimationFrame(render);
-      analyser.getByteFrequencyData(dataArray);
-
-      if (!ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const barCount = 140;
-      const barWidth = 3;
-      const gap = (canvas.width - barCount * barWidth) / (barCount - 1);
-      const centerY = canvas.height / 2;
-
-      for (let i = 0; i < barCount; i++) {
-        const raw = dataArray[i % bufferLength] / 255;
-        prevMicData.current[i] = prevMicData.current[i] * 0.84 + raw * 0.16;
-        const val = prevMicData.current[i];
-
-        const height = Math.max(3, val * (canvas.height * 0.9));
-        const x = i * (barWidth + gap);
-        const y = centerY - height / 2;
-
-        const grad = ctx.createLinearGradient(0, y, 0, y + height);
-        grad.addColorStop(0, "rgba(56, 189, 248, 0.2)");
-        grad.addColorStop(0.5, "#38bdf8");
-        grad.addColorStop(1, "rgba(14, 165, 233, 0.2)");
-
-        ctx.shadowBlur = val > 0.1 ? 12 : 0;
-        ctx.shadowColor = "#0284c7";
-        ctx.fillStyle = grad;
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, barWidth, height, 1.5);
-        ctx.fill();
-      }
-    };
-
-    render();
-
-    return () => {
-      cancelAnimationFrame(animationId);
-      audioCtx.close();
-    };
-  }, [localParticipant, isMicrophoneEnabled]);
-
-  useEffect(() => {
-    const mediaStreamTrack = aiAudioTrack?.publication?.track?.mediaStreamTrack;
-    if (!mediaStreamTrack || !aiCanvasRef.current) return;
-
-    const AudioContextClass =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
-    const audioCtx = new AudioContextClass();
-    const stream = new MediaStream([mediaStreamTrack]);
-    const source = audioCtx.createMediaStreamSource(stream);
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 512;
-    analyser.smoothingTimeConstant = 0.8;
-    source.connect(analyser);
-
-    const canvas = aiCanvasRef.current;
-    const ctx = canvas.getContext("2d");
-    let animationId: number;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    const render = () => {
-      animationId = requestAnimationFrame(render);
-      analyser.getByteFrequencyData(dataArray);
-
-      if (!ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const barCount = 140;
-      const barWidth = 3;
-      const gap = (canvas.width - barCount * barWidth) / (barCount - 1);
-      const centerY = canvas.height / 2;
-
-      for (let i = 0; i < barCount; i++) {
-        const raw = dataArray[i % bufferLength] / 255;
-        prevAiData.current[i] = prevAiData.current[i] * 0.84 + raw * 0.16;
-        const val = prevAiData.current[i];
-
-        const height = Math.max(3, val * (canvas.height * 0.9));
-        const x = i * (barWidth + gap);
-        const y = centerY - height / 2;
-
-        const grad = ctx.createLinearGradient(0, y, 0, y + height);
-        grad.addColorStop(0, "rgba(6, 182, 212, 0.25)");
-        grad.addColorStop(0.5, "#22d3ee");
-        grad.addColorStop(1, "rgba(37, 99, 235, 0.25)");
-
-        ctx.shadowBlur = val > 0.1 ? 16 : 0;
-        ctx.shadowColor = "#06b6d4";
-        ctx.fillStyle = grad;
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, barWidth, height, 1.5);
-        ctx.fill();
-      }
-    };
-
-    render();
-
-    return () => {
-      cancelAnimationFrame(animationId);
-      audioCtx.close();
-    };
-  }, [aiAudioTrack]);
-
+/* Corner Reticles HUD Utility */
+function Reticles() {
   return (
-    <div className="w-full bg-[#030816]/90 border border-cyan-900/60 p-4 relative flex flex-col gap-3 shadow-[0_0_60px_rgba(2,132,199,0.15)]">
-      <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-cyan-400"></div>
-      <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-cyan-400"></div>
-      <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-cyan-400"></div>
-      <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-cyan-400"></div>
-
-      <div className="absolute top-0 bottom-0 left-[35%] w-[1px] bg-cyan-500/80 z-30 pointer-events-none shadow-[0_0_8px_#06b6d4]">
-        <div className="absolute top-1 -left-2 text-[7px] text-cyan-300 font-bold bg-slate-950 px-1 border border-cyan-600">
-          SCAN
-        </div>
-      </div>
-
-      <div className="w-full flex items-center gap-4 z-10">
-        <div className="w-32 shrink-0 flex flex-col justify-between py-0.5 border-l-2 border-sky-400 pl-2">
-          <span className="text-[9px] font-bold text-sky-400 uppercase tracking-widest">
-            OPERATOR
-          </span>
-          <span className="text-xs font-semibold text-gray-200">
-            FIELD COMM
-          </span>
-          <span className="text-[8px] text-cyan-600 font-mono">
-            {isMicrophoneEnabled ? "TX // LIVE" : "TX // MUTED"}
-          </span>
-        </div>
-
-        <div className="relative h-16 flex-1 flex items-center bg-[#01040d] border border-cyan-950 px-2 overflow-hidden shadow-inner">
-          <div className="absolute left-0 right-0 h-0 border-t border-dashed border-cyan-900/40 top-1/2 -translate-y-1/2 pointer-events-none"></div>
-          <canvas ref={micCanvasRef} className="w-full h-full z-10" />
-        </div>
-      </div>
-
-      <div className="w-full flex items-center gap-4 z-10">
-        <div className="w-32 shrink-0 flex flex-col justify-between py-0.5 border-l-2 border-cyan-400 pl-2">
-          <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-widest">
-            TACTICAL AI
-          </span>
-          <span className="text-xs font-semibold text-cyan-200">
-            SYNTH ENGINE
-          </span>
-          <span className="text-[8px] text-cyan-500 font-mono tracking-wider">
-            {state.toUpperCase()}
-          </span>
-        </div>
-
-        <div className="relative h-16 flex-1 flex items-center bg-[#01040d] border border-cyan-950 px-2 overflow-hidden shadow-inner">
-          <div className="absolute left-0 right-0 h-0 border-t border-dashed border-cyan-900/40 top-1/2 -translate-y-1/2 pointer-events-none"></div>
-          <canvas ref={aiCanvasRef} className="w-full h-full z-10" />
-        </div>
-      </div>
-    </div>
+    <>
+      <div className="pointer-events-none absolute top-0 left-0 w-2 h-2 border-t border-l border-cyan-400" />
+      <div className="pointer-events-none absolute top-0 right-0 w-2 h-2 border-t border-r border-cyan-400" />
+      <div className="pointer-events-none absolute bottom-0 left-0 w-2 h-2 border-b border-l border-cyan-400" />
+      <div className="pointer-events-none absolute bottom-0 right-0 w-2 h-2 border-b border-r border-cyan-400" />
+    </>
   );
 }
