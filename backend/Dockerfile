@@ -6,14 +6,15 @@ RUN npm install -g pnpm@latest tsx
 
 WORKDIR /app
 
-# Copy dependency manifests
+# Copy package manifest
 COPY backend/package.json ./
 
-# Allow build scripts and install native LiveKit bindings
-RUN pnpm config set ignore-scripts false
+# Permit native builds (fixes ERR_PNPM_IGNORED_BUILDS) and install dependencies
+RUN pnpm config set dangerously-allow-all-builds true
+RUN pnpm config set strict-dep-builds false
 RUN pnpm install
 
-# Copy application source code
+# Copy backend source
 COPY backend/ ./
 
 CMD ["tsx", "src/main.ts"]
