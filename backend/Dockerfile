@@ -7,6 +7,9 @@ RUN corepack enable
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./
+
+# Configure pnpm to run build scripts without interactive approval
+RUN pnpm config set ignore-scripts false
 RUN pnpm install --frozen-lockfile
 
 COPY . .
