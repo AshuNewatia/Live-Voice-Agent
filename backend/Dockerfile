@@ -9,7 +9,7 @@ WORKDIR /app
 # Copy package manifest
 COPY backend/package.json ./
 
-# Permit native builds (fixes ERR_PNPM_IGNORED_BUILDS) and install dependencies
+# Permit native builds and install dependencies
 RUN pnpm config set dangerously-allow-all-builds true
 RUN pnpm config set strict-dep-builds false
 RUN pnpm install
@@ -17,4 +17,4 @@ RUN pnpm install
 # Copy backend source
 COPY backend/ ./
 
-CMD ["tsx", "src/main.ts"]
+CMD ["tsx", "src/main.ts", "start"]
