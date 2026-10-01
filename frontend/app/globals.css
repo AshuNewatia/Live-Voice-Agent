@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Ensure the bar elements fill out properly along the timeline */
+.lk-va-bar-visualizer > * {
+  border-radius: 2px !important;
+  width: 3px !important;
+  margin: 0 1px !important;
+  transition: height 0.05s ease;
+}
+
+/* Track 1: Gray */
+.lk-va-bar-visualizer:not([data-lk-theme]) > * {
+  background-color: #6b7280;
+}
+
+/* Track 2: Purple */
+div:has(> .text-purple-400) ~ div .lk-va-bar-visualizer > * {
+  background-color: #a855f7 !important;
+}
