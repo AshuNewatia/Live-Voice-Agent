@@ -1,4 +1,5 @@
-FROM node:20-slim AS base
+
+FROM node:24-slim AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -6,12 +7,12 @@ RUN corepack enable
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc* ./
+COPY backend/package.json ./backend/
 
-# Configure pnpm to run build scripts without interactive approval
-RUN pnpm config set ignore-scripts false
 RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+WORKDIR /app/backend
 CMD ["pnpm", "run", "start"]
