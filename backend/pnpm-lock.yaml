@@ -11,6 +11,15 @@ importers:
       '@livekit/agents':
         specifier: ^1.9.0
         version: 1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5)
+      '@livekit/agents-plugin-cartesia':
+        specifier: ^1.9.1
+        version: 1.9.1(@livekit/agents@1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5))(@livekit/rtc-node@0.13.35)(zod@4.6.5)
+      '@livekit/agents-plugin-deepgram':
+        specifier: ^1.9.1
+        version: 1.9.1(@livekit/agents@1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5))(@livekit/rtc-node@0.13.35)
+      '@livekit/agents-plugin-openai':
+        specifier: ^1.9.1
+        version: 1.9.1(@livekit/agents@1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5))(@livekit/rtc-node@0.13.35)(zod@4.6.5)
       '@livekit/plugins-ai-coustics':
         specifier: ^0.3.2
         version: 0.3.2(@livekit/agents@1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5))(@livekit/rtc-node@0.13.35)
@@ -488,6 +497,26 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@livekit/agents-plugin-cartesia@1.9.1':
+    resolution: {integrity: sha512-xWsiep2B/bF1PZoffZqy3KG6tIpyKSL3G/AOlgYQQ2nf2ycP22+62ODzIPLFVUgtoglYYA4Uys4g31TMoajmHw==}
+    peerDependencies:
+      '@livekit/agents': 1.9.1
+      '@livekit/rtc-node': ^1.1.0
+      zod: ^3.25.76 || ^4.1.8
+
+  '@livekit/agents-plugin-deepgram@1.9.1':
+    resolution: {integrity: sha512-Bah7buT8xgkB48OF6RkUX8UgrVSADZ8sUGUn1aovik1sp3q1MRwNOAKAa8zNXxkNFZnEJ+zrDKudtufYDRIQPQ==}
+    peerDependencies:
+      '@livekit/agents': 1.9.1
+      '@livekit/rtc-node': ^1.1.0
+
+  '@livekit/agents-plugin-openai@1.9.1':
+    resolution: {integrity: sha512-sspmJ9aQiW/tNdMrYy81xRMT89Z375uXRzZJbKwOH751PrPj5mP7kqRXrTYN6AmqO2rKwZ2d/9mVavoKONPQ6w==}
+    peerDependencies:
+      '@livekit/agents': 1.9.1
+      '@livekit/rtc-node': ^1.1.0
+      zod: ^3.25.76 || ^4.1.8
 
   '@livekit/agents@1.9.1':
     resolution: {integrity: sha512-M8AxdKwzYzE9maO2cfPtGIXGqt9lpb3rsnBnC0vxZwRND+4y/GcW0t+c5CFDZGPHJ45bKvKALqI5aWnpCwgmWg==}
@@ -2379,6 +2408,40 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@livekit/agents-plugin-cartesia@1.9.1(@livekit/agents@1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5))(@livekit/rtc-node@0.13.35)(zod@4.6.5)':
+    dependencies:
+      '@livekit/agents': 1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5)
+      '@livekit/rtc-node': 0.13.35
+      ws: 8.22.0
+      zod: 4.6.5
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@livekit/agents-plugin-deepgram@1.9.1(@livekit/agents@1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5))(@livekit/rtc-node@0.13.35)':
+    dependencies:
+      '@livekit/agents': 1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5)
+      '@livekit/rtc-node': 0.13.35
+      ws: 8.22.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@livekit/agents-plugin-openai@1.9.1(@livekit/agents@1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5))(@livekit/rtc-node@0.13.35)(zod@4.6.5)':
+    dependencies:
+      '@livekit/agents': 1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5)
+      '@livekit/mutex': 1.1.1
+      '@livekit/rtc-node': 0.13.35
+      openai: 6.49.0(ws@8.22.0)(zod@4.6.5)
+      ws: 8.22.0
+      zod: 4.6.5
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - bufferutil
+      - utf-8-validate
 
   '@livekit/agents@1.9.1(@livekit/rtc-node@0.13.35)(@types/node@24.19.0)(supports-color@7.2.0)(typescript@5.9.3)(zod@4.6.5)':
     dependencies:
