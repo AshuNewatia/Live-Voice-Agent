@@ -52,6 +52,13 @@ async function wdClaims(qid: string, prop: string): Promise<WdClaim[]> {
 
 const yearOf = (c?: WdClaim) => c?.mainsnak?.datavalue?.value?.time?.slice(1, 5);
 
+// Questions about the Director (the user) are never looked up on Wikipedia: the blue
+// Director File is shown by the frontend (see frontend/app/directorFile.ts).
+const isDirectorQuery = (name: string) => {
+  const n = name.toLowerCase().trim();
+  return /n[ae][wv][ae]?tia/.test(n) || n === 'ashu' || n === 'director ashu';
+};
+
 export default defineAgent({
   entry: async (ctx: JobContext) => {
     await ctx.connect();
@@ -69,6 +76,11 @@ export default defineAgent({
       }),
       execute: async ({ name }) => {
         try {
+          // Director file (Ashu Newatia): never use Wikipedia. The blue dossier is handled on screen.
+          if (isDirectorQuery(name)) {
+            return 'RESTRICTED DIRECTOR FILE. If Ghost Protocol is currently active, say only: "Director dossier displayed on terminal." Otherwise say only: "Access denied. Director clearance required." Disclose no other detail.';
+          }
+
           const title = await findTitle(name);
           if (!title) return 'NO PUBLIC RECORD FOUND.';
 
@@ -106,7 +118,7 @@ export default defineAgent({
             bioText.includes('terrorist') ||
             bioText.includes('cartel') ||
             bioText.includes('mass murder') ||
-            bioText.includes('assassin') ||
+            /\bassassins?\b/.test(bioText) ||
             bioText.includes('convicted of murder') ||
             bioText.includes('war criminal');
 
@@ -125,7 +137,7 @@ export default defineAgent({
               : isHostile
                 ? 'INCARCERATED / MONITORED'
                 : 'ACTIVE // PUBLIC FIGURE',
-            origin: `${s.description ?? 'Unknown'}${born ? ` · b. \${born}` : ''}`,
+            origin: `${s.description ?? 'Unknown'}${born && !(s.description ?? '').includes(born) ? ` · b. ${born}` : ''}`,
             primaryAffiliation: isHostile
               ? 'Criminal Archive / Interpol Watchlist'
               : 'Public Record (Wikipedia / Wikidata)',
@@ -141,7 +153,7 @@ export default defineAgent({
             { reliable: true, topic: 'dossier' },
           );
 
-          return `${s.title} (${s.description ?? 'public figure'}${born ? `, born \${born}` : ''}${died ? `, died \${died}` : ''}): ${s.extract}`;
+          return `${s.title} (${s.description ?? 'public figure'}${born ? `, born ${born}` : ''}${died ? `, died ${died}` : ''}): ${s.extract}`;
         } catch (err) {
           console.warn('[IMF AGENT] lookupPerson failed:', err);
           return 'DATABASE LINK FAILURE.';
@@ -172,16 +184,17 @@ export default defineAgent({
             display_name: string;
           }>;
 
-          if (!geoData || geoData.length === 0) {
+          const first = geoData?.[0];
+          if (!first) {
             return `UNABLE TO ACQUIRE ORBITAL FIX ON: ${query}.`;
           }
 
-          const lat = parseFloat(geoData[0].lat);
-          const lon = parseFloat(geoData[0].lon);
+          const lat = parseFloat(first.lat);
+          const lon = parseFloat(first.lon);
 
           const satPayload = {
             target: query.toUpperCase(),
-            locationName: geoData[0].display_name,
+            locationName: first.display_name,
             lat,
             lon,
             satelliteCode: `KH-11 // KEYHOLE-${Math.floor(100 + Math.random() * 900)}`,
@@ -249,7 +262,14 @@ ORBITAL SATELLITE RECONNAISSANCE:
 - To dismiss or close the satellite view, confirm with: "Satellite link disengaged."
 
 DOSSIER DATABASE:
-- Brief the operative on any real person using the lookupPerson tool. Always query lookupPerson first.`,
+- Brief the operative on any real person using the lookupPerson tool. Always query lookupPerson first.
+
+DIRECTOR FILE (ASHU NEWATIA):
+- A question such as "Who is Ashu Newatia?", "Show my dossier", or "Director file" is NOT the Ghost Protocol command. Never repeat the clearance greeting for it.
+- Ghost Protocol is active only if the operator executed it earlier in this session and has not since said "Stand Down" or "Revoke Ghost Protocol".
+- If Ghost Protocol is active, say only: "Director dossier displayed on terminal."
+- If Ghost Protocol is not active, say only: "Access denied. Director clearance required." Add no detail about the person.
+- Never call lookupPerson for Ashu Newatia.`,
       tools: { lookupPerson, locateTheater },
     });
 

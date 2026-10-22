@@ -13,6 +13,11 @@ import {
   useDataChannel,
 } from "@livekit/components-react";
 import { ConnectionState, Track } from "livekit-client";
+import {
+  AUTO_OPEN_DIRECTOR_FILE,
+  DIRECTOR_FILE,
+  type DirectorDossier,
+} from "./directorFile";
 
 interface TargetDossier {
   variant: "hostile" | "public";
@@ -149,6 +154,24 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
     null,
   );
 
+  // Director (Ghost Protocol) dossier: Ashu Newatia, blue panel
+  const [directorDossier, setDirectorDossier] =
+    useState<DirectorDossier | null>(null);
+
+  const { localParticipant } = useLocalParticipant();
+
+  // 1. Sync clearance state with backend main.ts
+  const sendClearanceToBackend = (director: boolean) => {
+    try {
+      localParticipant?.publishData(
+        new TextEncoder().encode(JSON.stringify({ director })),
+        { reliable: true, topic: "clearance" },
+      );
+    } catch (e) {
+      console.warn("Clearance send error:", e);
+    }
+  };
+
   // Dossiers pushed from the backend agent
   useDataChannel("dossier", (msg) => {
     try {
@@ -158,6 +181,7 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
       const preset = Object.entries(DOSSIER_DATABASE).find(([key]) =>
         incoming.realName.toLowerCase().includes(key),
       );
+      setDirectorDossier(null);
       setActiveDossier(preset ? preset[1] : incoming);
     } catch (e) {
       console.warn("Dossier parse failure:", e);
@@ -186,9 +210,13 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
   const agentConnectedToRecorderRef = useRef<boolean>(false);
 
   const connectionState = useConnectionState();
-  const { localParticipant } = useLocalParticipant();
   const { audioTrack: agentTrack } = useVoiceAssistant();
   const { send: sendChat, chatMessages } = useChat();
+
+  // Hide the director file the moment Ghost Protocol is revoked.
+  useEffect(() => {
+    if (!isDirector) setDirectorDossier(null);
+  }, [isDirector]);
 
   const micPub = Array.from(localParticipant.trackPublications.values()).find(
     (p) => p.source === Track.Source.Microphone,
@@ -466,6 +494,11 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
         (clean.includes("ghost protocol") && !clean.includes("revoke")))
     ) {
       setIsDirector(true);
+      sendClearanceToBackend(true);
+      if (AUTO_OPEN_DIRECTOR_FILE) {
+        setActiveDossier(null);
+        setDirectorDossier(DIRECTOR_FILE);
+      }
       commandExecuted = true;
     }
     if (
@@ -473,8 +506,24 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
       (clean.includes("revoke ghost protocol") || clean.includes("stand down"))
     ) {
       setIsDirector(false);
+      sendClearanceToBackend(false);
       setIsGlitching(true);
       setTimeout(() => setIsGlitching(false), 800);
+      commandExecuted = true;
+    }
+
+    // Director File query
+    if (
+      isDirector &&
+      (/\bashu\b/.test(clean) ||
+        /n[ae][wv][ae]?tia/.test(clean) ||
+        clean.includes("my dossier") ||
+        clean.includes("my file") ||
+        clean.includes("director file") ||
+        clean.includes("director dossier"))
+    ) {
+      setActiveDossier(null);
+      setDirectorDossier(DIRECTOR_FILE);
       commandExecuted = true;
     }
 
@@ -484,6 +533,7 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
       clean.includes("pablo escobar") ||
       clean.includes("the patron")
     ) {
+      setDirectorDossier(null);
       setActiveDossier(DOSSIER_DATABASE.escobar);
       commandExecuted = true;
     }
@@ -493,6 +543,7 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
       clean.includes("clear intel")
     ) {
       setActiveDossier(null);
+      setDirectorDossier(null);
       commandExecuted = true;
     }
 
@@ -501,7 +552,8 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
       clean.includes("close satellite") ||
       clean.includes("dismiss satellite") ||
       clean.includes("disable satellite") ||
-      clean.includes("clear satellite")
+      clean.includes("clear satellite") ||
+      clean.includes("exit satellite")
     ) {
       setActiveSatellite(null);
       commandExecuted = true;
@@ -511,6 +563,7 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
     if (clean.includes("burn notice") || clean.includes("sanitize comms")) {
       setWipeTimestamp(Date.now());
       setActiveDossier(null);
+      setDirectorDossier(null);
       setActiveSatellite(null);
       commandExecuted = true;
     }
@@ -886,7 +939,7 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
               {/* Satellite Map Canvas Iframe */}
               <iframe
                 title="Satellite Recon"
-                src={`https://www.openstreetmap.org/export/embed.html?bbox=${activeSatellite.lon - 0.08}%2C${activeSatellite.lat - 0.05}%2C${activeSatellite.lon + 0.08}%2C${activeSatellite.lat + 0.05}&layer=mapnik&marker=${activeSatellite.lat}%2C${activeSatellite.lon}`}
+                src={`https://www.openstreetmap.org/export/embed.html?bbox=${activeSatellite.lon - 0.04}%2C${activeSatellite.lat - 0.03}%2C${activeSatellite.lon + 0.04}%2C${activeSatellite.lat + 0.03}&layer=mapnik&marker=${activeSatellite.lat}%2C${activeSatellite.lon}`}
                 className="absolute inset-0 w-full h-full border-0 opacity-40 contrast-200 invert hue-rotate-180 brightness-75 pointer-events-none"
               />
 
@@ -1165,6 +1218,153 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
               </button>
               <button
                 onClick={() => setActiveDossier(null)}
+                className="border border-white/20 hover:border-white px-3 text-[10px] font-bold text-gray-400 hover:text-white transition-colors"
+              >
+                CLOSE
+              </button>
+            </div>
+          </aside>
+        )}
+
+        {/* GHOST PROTOCOL DIRECTOR DOSSIER (BLUE) */}
+        {isDirector && directorDossier && (
+          <aside className="absolute right-0 top-0 bottom-0 w-96 border-l-2 border-blue-500 bg-black/95 p-6 shadow-[-15px_0_35px_rgba(59,130,246,0.4)] backdrop-blur-md flex flex-col z-40 overflow-y-auto animate-in slide-in-from-right duration-300">
+            {/* Header banner */}
+            <div className="flex justify-between items-start border-b border-blue-600/60 pb-3">
+              <div>
+                <span className="bg-blue-500 px-2 py-0.5 text-[10px] font-black text-black tracking-widest uppercase">
+                  DIRECTOR FILE // EYES ONLY
+                </span>
+                <h2 className="text-xl font-black text-blue-400 tracking-widest mt-1">
+                  {directorDossier.codename}
+                </h2>
+                <p className="text-[10px] text-blue-300/80 font-bold">
+                  CLEARANCE: {directorDossier.clearance}
+                </p>
+              </div>
+              <button
+                onClick={() => setDirectorDossier(null)}
+                className="text-blue-400 hover:text-white border border-blue-700 hover:border-blue-400 px-2 py-0.5 text-xs font-bold transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Portrait & identity */}
+            <div className="mt-4 flex gap-3 border border-blue-900/60 bg-blue-950/20 p-3">
+              <div className="w-24 h-28 border border-blue-400/50 bg-black flex flex-col items-center justify-center relative overflow-hidden shrink-0">
+                <div className="absolute inset-0 bg-[repeating-linear-gradient(0deg,rgba(59,130,246,0.12)_0px,rgba(59,130,246,0.12)_2px,transparent_2px,transparent_4px)]"></div>
+                {directorDossier.photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={directorDossier.photo}
+                    alt={directorDossier.fullName}
+                    className="absolute inset-0 w-full h-full object-cover opacity-80"
+                  />
+                ) : (
+                  <span className="text-3xl font-black text-blue-400 opacity-80 font-mono">
+                    {directorDossier.fullName
+                      .split(" ")
+                      .map((w) => w[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()}
+                  </span>
+                )}
+                <span className="relative text-[8px] font-bold text-blue-300 mt-1 uppercase tracking-widest">
+                  IDENTITY VERIFIED
+                </span>
+              </div>
+              <div className="flex flex-col justify-between text-[11px] leading-tight">
+                <div>
+                  <span className="text-blue-300/60 text-[9px] font-bold uppercase">
+                    Director:
+                  </span>
+                  <p className="font-bold text-white">
+                    {directorDossier.fullName}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-blue-300/60 text-[9px] font-bold uppercase">
+                    Rank:
+                  </span>
+                  <p className="font-bold text-blue-300">
+                    {directorDossier.title}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-blue-300/60 text-[9px] font-bold uppercase">
+                    Status:
+                  </span>
+                  <p className="font-bold text-gray-300">
+                    {directorDossier.status}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Detail fields */}
+            <div className="mt-4 space-y-3 text-xs">
+              {directorDossier.fields.map((f, idx) => (
+                <div key={idx} className="border-b border-blue-900/40 pb-2">
+                  <span className="text-[10px] text-blue-300/70 font-bold uppercase tracking-wider">
+                    {f.label}:
+                  </span>
+                  <p className="text-gray-200 mt-0.5">{f.value}</p>
+                </div>
+              ))}
+
+              {directorDossier.tags.length > 0 && (
+                <div className="border-b border-blue-900/40 pb-2">
+                  <span className="text-[10px] text-blue-300/70 font-bold uppercase tracking-wider">
+                    Capabilities:
+                  </span>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {directorDossier.tags.map((t, idx) => (
+                      <span
+                        key={idx}
+                        className="border border-blue-700 bg-blue-950/40 px-1.5 py-0.5 text-[10px] font-bold text-blue-300"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <span className="text-[10px] text-blue-300/70 font-bold uppercase tracking-wider">
+                  Personal Brief:
+                </span>
+                <p className="text-gray-300 text-[11px] leading-relaxed mt-1 bg-black/60 p-2 border border-blue-950">
+                  {directorDossier.notes}
+                </p>
+              </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="mt-auto pt-4 flex gap-2">
+              <button
+                onClick={() => {
+                  const blob = new Blob(
+                    [JSON.stringify(directorDossier, null, 2)],
+                    { type: "application/json" },
+                  );
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `DIRECTOR_FILE_${directorDossier.fullName.replace(/\s+/g, "_")}.json`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex-1 border border-blue-500 bg-blue-950/40 text-blue-300 hover:bg-blue-900/50 py-2 text-[10px] font-bold tracking-widest uppercase transition-colors"
+              >
+                DOWNLOAD FILE
+              </button>
+              <button
+                onClick={() => setDirectorDossier(null)}
                 className="border border-white/20 hover:border-white px-3 text-[10px] font-bold text-gray-400 hover:text-white transition-colors"
               >
                 CLOSE
