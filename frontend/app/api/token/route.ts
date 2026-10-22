@@ -4,8 +4,6 @@ import { NextResponse } from "next/server";
 export async function GET() {
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
-
-  // Use NEXT_PUBLIC_LIVEKIT_URL for frontend, fallback to LIVEKIT_URL
   const wsUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL;
 
   if (!apiKey || !apiSecret || !wsUrl) {
@@ -15,9 +13,8 @@ export async function GET() {
     );
   }
 
-  // CRITICAL FIX: Must start with "room-" so LiveKit Cloud's Dispatch Rule triggers
-  const roomName = `room-${Date.now()}`;
-  const participantIdentity = `ashu-terminal-${Math.floor(Math.random() * 1000)}`;
+  const roomName = `imf-room-${Math.floor(Math.random() * 10000)}`;
+  const participantIdentity = `ashu-field-${Math.floor(Math.random() * 1000)}`;
 
   const at = new AccessToken(apiKey, apiSecret, {
     identity: participantIdentity,
@@ -30,6 +27,15 @@ export async function GET() {
     canPublish: true,
     canSubscribe: true,
   });
+
+  // Explicitly dispatch the agent to join this room upon creation
+  at.roomConfig = {
+    agents: [
+      {
+        agentName: "imf-agent",
+      },
+    ],
+  };
 
   return NextResponse.json({
     token: await at.toJwt(),
