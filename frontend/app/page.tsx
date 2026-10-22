@@ -10,10 +10,12 @@ import {
   useConnectionState,
   useTrackVolume,
   useChat,
+  useDataChannel,
 } from "@livekit/components-react";
 import { ConnectionState, Track } from "livekit-client";
 
 interface TargetDossier {
+  variant: "hostile" | "public";
   codename: string;
   realName: string;
   threatLevel: string;
@@ -23,10 +25,22 @@ interface TargetDossier {
   primaryAffiliation: string;
   crimes: string[];
   notes: string;
+  photo?: string;
+}
+
+interface SatelliteRecon {
+  target: string;
+  locationName: string;
+  lat: number;
+  lon: number;
+  satelliteCode: string;
+  orbitStatus: string;
+  resolution: string;
 }
 
 const DOSSIER_DATABASE: Record<string, TargetDossier> = {
   escobar: {
+    variant: "hostile",
     codename: "THE PATRON",
     realName: "Pablo Emilio Escobar Gaviria",
     threatLevel: "LEVEL ALPHA // CRITICAL",
@@ -129,6 +143,38 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
   const [activeDossier, setActiveDossier] = useState<TargetDossier | null>(
     null,
   );
+
+  // Live Satellite Reconnaissance State
+  const [activeSatellite, setActiveSatellite] = useState<SatelliteRecon | null>(
+    null,
+  );
+
+  // Dossiers pushed from the backend agent
+  useDataChannel("dossier", (msg) => {
+    try {
+      const incoming = JSON.parse(
+        new TextDecoder().decode(msg.payload),
+      ) as TargetDossier;
+      const preset = Object.entries(DOSSIER_DATABASE).find(([key]) =>
+        incoming.realName.toLowerCase().includes(key),
+      );
+      setActiveDossier(preset ? preset[1] : incoming);
+    } catch (e) {
+      console.warn("Dossier parse failure:", e);
+    }
+  });
+
+  // Satellite reconnaissance feed pushed from backend agent
+  useDataChannel("satellite", (msg) => {
+    try {
+      const incoming = JSON.parse(
+        new TextDecoder().decode(msg.payload),
+      ) as SatelliteRecon;
+      setActiveSatellite(incoming);
+    } catch (e) {
+      console.warn("Satellite parse failure:", e);
+    }
+  });
 
   // Wiretap Recording State & Audio Graph Refs
   const [isRecording, setIsRecording] = useState(false);
@@ -432,7 +478,7 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
       commandExecuted = true;
     }
 
-    // Target Dossier Query
+    // Target Dossier Query Manual Overrides
     if (
       clean.includes("escobar") ||
       clean.includes("pablo escobar") ||
@@ -450,10 +496,22 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
       commandExecuted = true;
     }
 
+    // Satellite Feed Overrides
+    if (
+      clean.includes("close satellite") ||
+      clean.includes("dismiss satellite") ||
+      clean.includes("disable satellite") ||
+      clean.includes("clear satellite")
+    ) {
+      setActiveSatellite(null);
+      commandExecuted = true;
+    }
+
     // Comms Scrubbing (Burn Notice)
     if (clean.includes("burn notice") || clean.includes("sanitize comms")) {
       setWipeTimestamp(Date.now());
       setActiveDossier(null);
+      setActiveSatellite(null);
       commandExecuted = true;
     }
 
@@ -652,6 +710,11 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
             <span>
               ENC: <span className="text-white">AES-256</span>
             </span>
+            {activeSatellite && (
+              <span className="text-emerald-400 animate-pulse font-bold">
+                [ ORBITAL FEED: {activeSatellite.target} ]
+              </span>
+            )}
           </div>
         </div>
 
@@ -786,63 +849,151 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
           </div>
         )}
 
-        {/* Right Column: Decryption Feed & Text CLI */}
+        {/* Right Column: Decryption Feed / Live Satellite View & Text CLI */}
         <div
-          className={`flex flex-1 flex-col border ${active.border} bg-black/60 backdrop-blur-sm ${active.glow} transition-all duration-700`}
+          className={`flex flex-1 flex-col border ${active.border} bg-black/60 backdrop-blur-sm ${active.glow} transition-all duration-700 relative`}
         >
           <div
             className={`flex justify-between items-center border-b ${active.border} bg-black/40 px-4 py-2 text-xs font-bold tracking-widest`}
           >
             <span className="opacity-70">
-              {isStealth ? "COVERT DECRYPTION LOG" : "LIVE DECRYPTION LOG"}
+              {activeSatellite
+                ? `ORBITAL RECONNAISSANCE // ${activeSatellite.satelliteCode}`
+                : isStealth
+                  ? "COVERT DECRYPTION LOG"
+                  : "LIVE DECRYPTION LOG"}
             </span>
-            {wipeTimestamp > 0 && (
-              <span className="text-red-500 animate-pulse">
-                [ LOGS SCRUBBED ]
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {activeSatellite && (
+                <button
+                  onClick={() => setActiveSatellite(null)}
+                  className="text-[10px] text-red-400 hover:text-red-300 font-bold tracking-wider"
+                >
+                  [ DISENGAGE SATCOM ]
+                </button>
+              )}
+              {wipeTimestamp > 0 && (
+                <span className="text-red-500 animate-pulse">
+                  [ LOGS SCRUBBED ]
+                </span>
+              )}
+            </div>
           </div>
 
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-track-transparent"
-          >
-            {visibleChatHistory.length === 0 ? (
-              <div className="flex h-full items-center justify-center opacity-40">
-                <p className="text-sm tracking-widest animate-pulse">
-                  [ LISTENING FOR SECURE COMMS ]
-                </p>
+          {/* DYNAMIC SATELLITE HUD OVERLAY */}
+          {activeSatellite ? (
+            <div className="relative flex-1 bg-gray-950 overflow-hidden flex flex-col justify-between p-4">
+              {/* Satellite Map Canvas Iframe */}
+              <iframe
+                title="Satellite Recon"
+                src={`https://www.openstreetmap.org/export/embed.html?bbox=${activeSatellite.lon - 0.08}%2C${activeSatellite.lat - 0.05}%2C${activeSatellite.lon + 0.08}%2C${activeSatellite.lat + 0.05}&layer=mapnik&marker=${activeSatellite.lat}%2C${activeSatellite.lon}`}
+                className="absolute inset-0 w-full h-full border-0 opacity-40 contrast-200 invert hue-rotate-180 brightness-75 pointer-events-none"
+              />
+
+              {/* Optical Reticle & Scanning Crosshairs */}
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="relative w-48 h-48 border border-cyan-500/40 rounded-full animate-spin [animation-duration:12s]">
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2 h-2 bg-cyan-400"></div>
+                </div>
+                <div className="absolute w-32 h-32 border-2 border-dashed border-red-500/60 rounded-full animate-ping [animation-duration:3s]"></div>
+                <div className="absolute w-6 h-6 border-t-2 border-l-2 border-cyan-400 top-1/2 left-1/2 -translate-x-6 -translate-y-6"></div>
+                <div className="absolute w-6 h-6 border-b-2 border-r-2 border-cyan-400 top-1/2 left-1/2 translate-x-1 translate-y-1"></div>
               </div>
-            ) : (
-              visibleChatHistory.map((msg, i) => (
-                <div key={i} className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2 text-[10px] opacity-50 font-bold tracking-wider">
-                    <span>{formatTime(msg.time)}</span>
-                    <span>//</span>
-                    <span
-                      className={msg.isUser ? "text-gray-400" : active.text}
-                    >
-                      {msg.isUser
-                        ? isDirector
-                          ? "AUTHORIZATION: ASHU"
-                          : "AUTHORIZATION: OPERATOR"
-                        : isDirector
-                          ? "CORE: DIRECTOR"
-                          : "CORE: IMF AI"}
+
+              {/* Top Telemetry Overlay */}
+              <div className="z-10 bg-black/80 border border-cyan-900/60 p-3 max-w-md backdrop-blur-sm">
+                <div className="flex justify-between items-center text-[10px] text-cyan-400 font-bold">
+                  <span>TARGET LOCK: {activeSatellite.target}</span>
+                  <span className="text-emerald-400">
+                    {activeSatellite.orbitStatus}
+                  </span>
+                </div>
+                <p className="text-xs text-white font-bold mt-1 truncate">
+                  {activeSatellite.locationName}
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-400">
+                  <div>
+                    LAT:{" "}
+                    <span className="text-cyan-300 font-bold">
+                      {activeSatellite.lat.toFixed(6)}°
                     </span>
-                    {msg.isText && <span className="border px-1">TXT</span>}
                   </div>
-                  <div
-                    className={`text-sm leading-relaxed tracking-wide ${
-                      msg.isUser ? "text-gray-300" : active.text
-                    }`}
-                  >
-                    {msg.text}
+                  <div>
+                    LON:{" "}
+                    <span className="text-cyan-300 font-bold">
+                      {activeSatellite.lon.toFixed(6)}°
+                    </span>
+                  </div>
+                  <div>
+                    OPTIC:{" "}
+                    <span className="text-cyan-300 font-bold">
+                      {activeSatellite.resolution}
+                    </span>
+                  </div>
+                  <div>
+                    UPLINK:{" "}
+                    <span className="text-cyan-300 font-bold">
+                      MIL-SAT ENCRYPTED
+                    </span>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+              </div>
+
+              {/* Bottom Reconnaissance Banner */}
+              <div className="z-10 flex justify-between items-center text-[10px] bg-black/80 border border-cyan-900/60 px-3 py-1.5 backdrop-blur-sm">
+                <span className="text-cyan-400 font-bold animate-pulse">
+                  ● LIVE SATELLITE RECONNAISSANCE ACTIVE
+                </span>
+                <button
+                  onClick={() => setActiveSatellite(null)}
+                  className="text-red-400 hover:text-white font-bold"
+                >
+                  RETURN TO CHAT STREAM
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              ref={scrollRef}
+              className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-track-transparent"
+            >
+              {visibleChatHistory.length === 0 ? (
+                <div className="flex h-full items-center justify-center opacity-40">
+                  <p className="text-sm tracking-widest animate-pulse">
+                    [ LISTENING FOR SECURE COMMS ]
+                  </p>
+                </div>
+              ) : (
+                visibleChatHistory.map((msg, i) => (
+                  <div key={i} className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 text-[10px] opacity-50 font-bold tracking-wider">
+                      <span>{formatTime(msg.time)}</span>
+                      <span>//</span>
+                      <span
+                        className={msg.isUser ? "text-gray-400" : active.text}
+                      >
+                        {msg.isUser
+                          ? isDirector
+                            ? "AUTHORIZATION: ASHU"
+                            : "AUTHORIZATION: OPERATOR"
+                          : isDirector
+                            ? "CORE: DIRECTOR"
+                            : "CORE: IMF AI"}
+                      </span>
+                      {msg.isText && <span className="border px-1">TXT</span>}
+                    </div>
+                    <div
+                      className={`text-sm leading-relaxed tracking-wide ${
+                        msg.isUser ? "text-gray-300" : active.text
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
           <form
             onSubmit={handleFallbackSubmit}
@@ -877,7 +1028,9 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
             <div className="flex justify-between items-start border-b border-red-700/60 pb-3">
               <div>
                 <span className="bg-red-600 px-2 py-0.5 text-[10px] font-black text-black tracking-widest uppercase">
-                  INTERPOL RED NOTICE
+                  {activeDossier.variant === "hostile"
+                    ? "INTERPOL RED NOTICE"
+                    : "OPEN-SOURCE DOSSIER"}
                 </span>
                 <h2 className="text-xl font-black text-red-500 tracking-widest mt-1">
                   {activeDossier.codename}
@@ -898,9 +1051,18 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
             <div className="mt-4 flex gap-3 border border-red-900/50 bg-red-950/20 p-3">
               <div className="w-24 h-28 border border-red-500/50 bg-black flex flex-col items-center justify-center relative overflow-hidden shrink-0">
                 <div className="absolute inset-0 bg-[repeating-linear-gradient(0deg,rgba(239,68,68,0.1)_0px,rgba(239,68,68,0.1)_2px,transparent_2px,transparent_4px)]"></div>
-                <span className="text-3xl text-red-500 opacity-60 font-mono">
-                  👤
-                </span>
+                {activeDossier.photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={activeDossier.photo}
+                    alt={activeDossier.realName}
+                    className="absolute inset-0 w-full h-full object-cover opacity-80"
+                  />
+                ) : (
+                  <span className="text-3xl text-red-500 opacity-60 font-mono">
+                    👤
+                  </span>
+                )}
                 <span className="text-[8px] font-bold text-red-400 mt-1 uppercase tracking-widest">
                   PHOTO DECRYPTED
                 </span>
@@ -937,30 +1099,36 @@ function Dashboard({ onDisconnect }: { onDisconnect: () => void }) {
             <div className="mt-4 space-y-3 text-xs">
               <div className="border-b border-red-900/30 pb-2">
                 <span className="text-[10px] text-red-400/70 font-bold uppercase tracking-wider">
-                  Origin & Base:
+                  {activeDossier.variant === "hostile"
+                    ? "Origin & Base:"
+                    : "Profession:"}
                 </span>
                 <p className="text-gray-200 mt-0.5">{activeDossier.origin}</p>
               </div>
 
               <div className="border-b border-red-900/30 pb-2">
                 <span className="text-[10px] text-red-400/70 font-bold uppercase tracking-wider">
-                  Primary Syndicate:
+                  {activeDossier.variant === "hostile"
+                    ? "Primary Syndicate:"
+                    : "Source:"}
                 </span>
                 <p className="text-gray-200 mt-0.5">
                   {activeDossier.primaryAffiliation}
                 </p>
               </div>
 
-              <div className="border-b border-red-900/30 pb-2">
-                <span className="text-[10px] text-red-400/70 font-bold uppercase tracking-wider">
-                  Key Documented Crimes:
-                </span>
-                <ul className="mt-1 list-disc list-inside text-gray-300 space-y-0.5 text-[11px]">
-                  {activeDossier.crimes.map((crime, idx) => (
-                    <li key={idx}>{crime}</li>
-                  ))}
-                </ul>
-              </div>
+              {activeDossier.crimes.length > 0 && (
+                <div className="border-b border-red-900/30 pb-2">
+                  <span className="text-[10px] text-red-400/70 font-bold uppercase tracking-wider">
+                    Key Documented Crimes:
+                  </span>
+                  <ul className="mt-1 list-disc list-inside text-gray-300 space-y-0.5 text-[11px]">
+                    {activeDossier.crimes.map((crime, idx) => (
+                      <li key={idx}>{crime}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div>
                 <span className="text-[10px] text-red-400/70 font-bold uppercase tracking-wider">
